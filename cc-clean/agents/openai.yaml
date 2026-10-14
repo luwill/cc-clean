@@ -1,0 +1,4 @@
+interface:
+  display_name: "cc-clean"
+  short_description: "检查 Claude 残留、关联与恢复回执，验证备份后按确认范围清理"
+  default_prompt: "使用 $cc-clean 检查指定 Claude Code 环境，先生成关联清单与只读报告，给出保留项、备份方案和具体待确认清单。"

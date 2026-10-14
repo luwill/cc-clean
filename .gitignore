@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+/test-artifacts/
+/audit*.json
+/report*.html
+/backups/
+/private/
+*.zip
