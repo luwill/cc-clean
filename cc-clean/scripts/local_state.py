@@ -234,31 +234,24 @@ def copy_root(source, destination):
     return 'posix-copy2-basic-metadata'
 
 
-def backup(roots, output):
+def backup(roots, output, allow_missing=False):
     require(os.name == 'posix', 'Use native ACL-aware backup on Windows')
     outside_sources(output, roots)
     no_symlink_parents(output)
     require(not output.exists(), 'Backup destination must be new')
     require(output.parent.is_dir(), 'Backup parent must already exist')
     before = snapshot(roots, hashed=True)
-    require(not summary(before)['missing_roots'], 'Missing backup root')
-    needed = summary(before)['bytes'] * 2 + 1024 * 1024
-    require(shutil.disk_usage(output.parent).free >= needed, 'Not enough free space for backup and recovery samples')
-    output.mkdir(mode=0o700)
-    private_json(output / 'started.json', {'status': 'backup_started', 'created_at': now()})
-    private_json(output / 'manifest.json', {'schema': SCHEMA, 'roots': {k: str(v) for k, v in roots.items()},
-                                          'trees': before})
-    copies = output / 'copies'
-    copies.mkdir(mode=0o700)
-    methods = {label: copy_root(source, copies / label) for label, source in roots.items()}
-    copied = snapshot({label: copies / label for label in roots}, hashed=True)
-    require(copied == before, 'Copied contents or base metadata differ; partial backup kept')
-    require(snapshot(roots, hashed=True) == before, 'Source changed while backing up; recheck before any cleanup')
-    sample_dir = output / 'restore-samples'
-    sample_dir.mkdir(mode=0o700)
+    missing_count = summary(before)['missing_roots']
+    if allow_missing:
+        require(missing_count < len(roots), 'At least one backup root must exist')
+        for label, value in before.items():
+            if value['missing']:
+                no_symlink_parents(roots[label].parent)
+                require(roots[label].parent.is_dir(), 'Missing backup root parent must already exist')
+    else:
+        require(not missing_count, 'Missing backup root')
     candidates = [(label, rel, record) for label, value in before.items()
                   for rel, record in value['entries'].items() if record['kind'] == 'file']
-    samples = []
     # Exercise a primary state file and a retained session when available.
     # Full copied-file hashes are verified separately, so this is not statistical sampling.
     state_candidates = [row for row in candidates if (row[1] == '.' and roots[row[0]].name == '.claude.json')
@@ -273,6 +266,23 @@ def backup(roots, output):
     if len(chosen) < 2:
         chosen.extend(row for row in sorted(candidates, key=lambda item: item[2]['bytes'])
                       if row not in chosen and len(chosen) < 2)
+    sample_bytes = sum(row[2]['bytes'] for row in chosen)
+    needed = summary(before)['bytes'] + sample_bytes + 1024 * 1024
+    require(shutil.disk_usage(output.parent).free >= needed, 'Not enough free space for backup and recovery samples')
+    output.mkdir(mode=0o700)
+    private_json(output / 'started.json', {'status': 'backup_started', 'created_at': now()})
+    private_json(output / 'manifest.json', {'schema': SCHEMA, 'roots': {k: str(v) for k, v in roots.items()},
+                                          'trees': before})
+    copies = output / 'copies'
+    copies.mkdir(mode=0o700)
+    methods = {label: ('absent-at-backup' if before[label]['missing'] else copy_root(source, copies / label))
+               for label, source in roots.items()}
+    copied = snapshot({label: copies / label for label in roots}, hashed=True)
+    require(copied == before, 'Copied contents or base metadata differ; partial backup kept')
+    require(snapshot(roots, hashed=True) == before, 'Source changed while backing up; recheck before any cleanup')
+    sample_dir = output / 'restore-samples'
+    sample_dir.mkdir(mode=0o700)
+    samples = []
     for index, (label, rel, record) in enumerate(chosen):
         source = copies / label if rel == '.' else copies / label / rel
         dest = sample_dir / f'sample-{index + 1}.bin'
@@ -336,6 +346,8 @@ def main(argv=None):
     inspect_parser.add_argument('--output', required=True)
     backup_parser = sub.add_parser('backup', help='Copy explicit roots to a new private directory and verify')
     backup_parser.add_argument('--root', action='append', required=True)
+    backup_parser.add_argument('--allow-missing', action='store_true',
+                               help='Record absent roots for pre-restore snapshots')
     backup_parser.add_argument('--output', required=True)
     verify_parser = sub.add_parser('verify', help='Verify an existing backup; never restore or edit source')
     verify_parser.add_argument('--backup-dir', required=True)
@@ -367,12 +379,13 @@ def main(argv=None):
         elif args.command == 'verify':
             result = verify(args.backup_dir, args.check_source)
         else:
-            roots = parse_roots(args.root, allow_missing=args.command == 'audit')
+            allow_missing = args.command == 'audit' or getattr(args, 'allow_missing', False)
+            roots = parse_roots(args.root, allow_missing=allow_missing)
             output = lexical_path(args.output)
             if args.command == 'audit':
                 result = audit(roots, output, args.state_file)
             else:
-                result = backup(roots, output)
+                result = backup(roots, output, allow_missing=args.allow_missing)
         print(json.dumps(result, ensure_ascii=False))
         return 2 if result.get('status') in ('restore_partial', 'restore_failed') else 0
     except GuardError as error:

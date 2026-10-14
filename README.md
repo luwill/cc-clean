@@ -60,6 +60,6 @@ audit 只记录文件元数据，不读取凭据或历史正文。主状态 JSON
 make check
 ```
 
-执行源码格式/语法/引用检查与 **48 项虚构数据测试**。不会访问真实 Claude 目录、Keychain、进程环境或网络；测试样本保留在被 Git 忽略的 `test-artifacts/` 中，不自动删除。HTML 的 JavaScript 语法检查需要 Node.js。
+执行源码格式/语法/引用检查与 **50 项虚构数据测试**。不会访问真实 Claude 目录、Keychain、进程环境或网络；测试样本保留在被 Git 忽略的 `test-artifacts/` 中，不自动删除。HTML 的 JavaScript 语法检查需要 Node.js。
 
 仅包含技能、说明与测试代码。真实审计、原始历史、凭据、备份、安装回执和本机路径清单不应提交到仓库。

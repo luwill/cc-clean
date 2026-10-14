@@ -344,6 +344,33 @@ class ReviewTests(unittest.TestCase):
         self.assertEqual(result['status'], 'restore_failed')
         self.assertEqual(result['unselected_changes'], 1)
 
+    def test_missing_file_root_can_be_backed_up_planned_and_observed(self):
+        old = self.base / 'old'
+        guard.backup(self.roots, old)
+        os.rename(self.state, self.base / 'retained-state.json')
+        current = self.base / 'current'
+        guard.backup(self.roots, current, allow_missing=True)
+        self.assertEqual(guard.verify(current, check_source=True)['missing_roots'], 1)
+        plan = self.base / 'plan.json'
+        review.prepare_restore(guard, old, current, ['state:.'], plan)
+        self.assertIsNone(guard.safe_json(plan)['items'][0]['before'])
+        self.restore_fictional_state(old)
+        self.assertEqual(review.record_restore(guard, str(plan), self.base / 'receipt.json')['status'], 'restore_verified')
+
+    def test_project_memory_and_telemetry_classification_and_plugin_masking(self):
+        project = self.fixture()
+        (project / 'memory').mkdir()
+        (project / 'memory/MEMORY.md').write_text('keep memory\n')
+        (self.config / 'plugins/demo@vendor.json').write_text('{}\n')
+        audit_file = self.audit()
+        graph = guard.safe_json(audit_file)['relationships']
+        self.assertEqual(graph['unresolved'], [])
+        self.assertEqual(review.classify('telemetry/failed.json', 'file'), 'current-login')
+        self.assertEqual(review.classify('projects/-synthetic-a-b/memory/MEMORY.md', 'file'), 'work-asset')
+        self.assertEqual(review.classify('.', 'file', '.credentials.json'), 'current-login')
+        self.assertEqual(review.masked_text('plugins/demo@vendor.json', {}), 'plugins/demo@vendor.json')
+        self.assertEqual(review.masked_text('user@example.com.json', {}), '<email>.json')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

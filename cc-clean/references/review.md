@@ -15,7 +15,7 @@
 | `unverified_reason` / `preserve_reason` | 未确定的账号、活跃状态与项目路径；默认保留历史工作数据 |
 | `cleanup_authorized` | 固定 false，不能用关系或工具输出代替用户批准 |
 
-可识别 `projects/<标签>/<UUID>.jsonl`、项目 UUID 子目录、`session-env/<UUID>`、`file-history/<UUID>`、`debug/<UUID>.txt`、`todos/<UUID>-agent-*.json`。其他命名记入 unresolved；不会扩大扫描范围或去查询真实项目目录。名称随客户端版本变化时补核实，不升级为“全局零残留”。
+可识别 `projects/<标签>/<UUID>.jsonl`、项目 UUID 子目录、`session-env/<UUID>`、`file-history/<UUID>`、`debug/<UUID>.txt`、`todos/<UUID>-agent-*.json`。项目级 `projects/<标签>/memory` 与 `CLAUDE.md` 归为工作资产，不混入未识别会话；其他命名记入 unresolved，不会扩大扫描范围或去查询真实项目目录。名称随客户端版本变化时补核实，不升级为“全局零残留”。
 
 ## 离线 HTML
 
@@ -30,7 +30,7 @@
 恢复前读取 [operations.md](operations.md#恢复)，明确会带回哪些旧状态。下面命令中的路径都是用户已选的私有目录。helper 不执行恢复，不接受字符串“approved”作为授权。
 
 1. 验证旧备份：`verify --backup-dir /私有目录/旧备份`。使用 schema 1，兼容 v0.1.0 备份。
-2. 对**相同根标签与路径**生成恢复前当前备份，再 `verify --check-source`；不自动创建未选根、不读取排除环境。
+2. 对**相同根标签与路径**生成恢复前当前备份（若待恢复的单文件根当前不存在，加 `--allow-missing` 记录缺失前态），再 `verify --check-source`；不自动创建未选根、不读取排除环境。
 3. 准备精确的逐文件计划：
 
 ```bash

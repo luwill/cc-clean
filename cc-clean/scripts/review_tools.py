@@ -17,14 +17,17 @@ REASONS = {
 }
 
 
-def classify(rel, kind):
+def classify(rel, kind, root_name=''):
     if kind == 'symlink':
         return 'unverified'
     parts = PurePosixPath(rel).parts
-    top = parts[0] if parts else '.'
-    if top in {'.credentials.json', 'credentials.json', '.claude.json'}:
+    top = root_name if rel == '.' and root_name else (parts[0] if parts else '.')
+    if (top in {'.credentials.json', 'credentials.json', '.claude.json', 'telemetry', 'statsig',
+                'stats-cache.json', 'backups'} or top.startswith('.claude.json.backup')):
         return 'current-login'
     if top in {'skills', 'plugins', 'commands', 'agents', 'rules', 'hooks', 'mcp', 'ide'} or top.startswith('settings') or top == 'CLAUDE.md':
+        return 'work-asset'
+    if len(parts) >= 3 and parts[0] == 'projects' and parts[2] in {'memory', 'CLAUDE.md'}:
         return 'work-asset'
     if top in AREAS or top in {'history.jsonl', 'logs', 'shell-snapshots', 'transcripts', 'tasks', 'plans'}:
         return 'historical'
@@ -44,6 +47,8 @@ def relationships(trees):
             if record['kind'] != 'symlink':
                 if area == 'projects' and len(parts) >= 3:
                     name = parts[2]
+                    if name in {'memory', 'CLAUDE.md'}:
+                        continue
                     if len(parts) == 3 and name.endswith('.jsonl') and record['kind'] == 'file':
                         name, role = name[:-6], 'project-session'
                     elif len(parts) > 3 or record['kind'] == 'directory':
@@ -131,6 +136,8 @@ def plan_payload(core, old_dir, current_dir, selections):
         before = current['trees'][label]['entries'].get(rel)
         core.require(intended is not None and intended['kind'] == 'file', 'Select a regular file from the old backup')
         core.require(before is None or before['kind'] == 'file', 'Current selected target must be a regular file or absent')
+        if rel == '.':
+            core.require(target.parent.is_dir(), 'Restore parent must already exist; directory creation needs a separate plan')
         # A newly created parent would broaden the plan and change an unselected node.
         for parent in PurePosixPath(rel).parents if rel != '.' else []:
             parent_rel = str(parent)
@@ -214,7 +221,8 @@ def masked_text(text, roots):
         text = text.replace(root, f'<root:{label}>')
     text = re.sub(r'/(?:Users|home)/[^/\s]+', '<home>', text)
     text = re.sub(r'-(?:Users|home)-[^/\s]+', '<encoded-project>', text)
-    text = re.sub(r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}', '<email>', text)
+    text = re.sub(r'[\w.+-]+@[\w.-]+\.(?!(?:jsonl?|md|txt|py|js|ts|html|css|ya?ml|sh|toml|lock|bin)\b)[A-Za-z]{2,}',
+                  '<email>', text)
     text = UUID_RE.sub('<session-id>', text)
     text = re.sub(r'(?i)(?:sk-(?:proj-|ant-)?|gh[pousr]_|github_pat_|Bearer[ _-])[A-Za-z0-9_-]{6,}', '<secret>', text)
     text = re.sub(r'(?i)\b[a-f0-9]{24,}\b', '<fingerprint>', text)
@@ -275,9 +283,7 @@ def render_report(core, audit_file, output, receipt_file=None):
         for rel, record in value['entries'].items():
             if record['kind'] == 'directory':
                 continue
-            category = classify(rel, record['kind'])
-            if rel == '.' and roots[label].name == '.claude.json':
-                category = 'current-login'
+            category = classify(rel, record['kind'], roots[label].name)
             counts[category] += 1
             rows.append({'root': label, 'path': rel, 'kind': record['kind'], 'bytes': record.get('bytes', 0),
                          'category': category, 'review_status': 'preserve', 'preserve_reason': REASONS[category]})
