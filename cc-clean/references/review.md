@@ -29,7 +29,7 @@
 
 恢复前读取 [operations.md](operations.md#恢复)，明确会带回哪些旧状态。下面命令中的路径都是用户已选的私有目录。helper 不执行恢复，不接受字符串“approved”作为授权。
 
-1. 验证旧备份：`verify --backup-dir /私有目录/旧备份`。使用 schema 1，兼容 v0.1.0 备份。
+1. 验证旧备份：`verify --backup-dir /私有目录/旧备份`。使用 schema 1，兼容 v0.1.0 / v0.2.0 备份。
 2. 对**相同根标签与路径**生成恢复前当前备份（若待恢复的单文件根当前不存在，加 `--allow-missing` 记录缺失前态），再 `verify --check-source`；不自动创建未选根、不读取排除环境。
 3. 准备精确的逐文件计划：
 

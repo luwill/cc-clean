@@ -5,7 +5,7 @@ description: "检查和按确认范围清理 Claude Code 的旧账号残留、�
 
 # cc-clean：Claude Code 环境检查与清理
 
-版本 v0.2.0。Codex 使用 `$cc-clean`；Claude Code 使用 `/cc-clean`。
+版本 v0.2.1。Codex 使用 `$cc-clean`；Claude Code 使用 `/cc-clean`。
 
 把指定环境中的旧账号状态处理清楚，并证明保留项没有被误改。适用于账号封禁、无法访问、账号切换和独立网关迁移。账号问题本身走官方恢复或申诉；本地操作不改变服务端记录，也不保证新账号状态。
 

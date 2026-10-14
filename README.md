@@ -1,17 +1,17 @@
 # cc-clean
 
-Claude Code 环境检查与按确认范围清理的 Agent Skill。当前版本 **v0.2.0**，支持 Codex 和 Claude Code。
+Claude Code 环境检查与按确认范围清理的 Agent Skill。当前版本 **v0.2.1**，支持 Codex 和 Claude Code。
 
 从只读检查开始：查清旧账号状态的实际位置、会话与附属文件的关联、需要保留的工作资产；验证备份后，才按用户确认的具体清单执行操作。账号恢复或申诉仍使用官方渠道，本地操作不改变服务端记录。
 
 ## 能力
 
-- **关联清单**：项目会话、session-env、file-history、debug、todos 的同根 UUID 路径关联，标明证据、未验证原因与保留理由。不会因 session-env 缺失或项目路径不存在就判定可删。
-- **只读 HTML**：离线单文件，支持搜索、类别/关联筛选、分页及审阅清单导出；默认遮罩常见身份与密钥格式，没有删除、应用或恢复接口。
+- **关联清单**：项目会话、session-env、file-history、debug、todos 的同根 UUID 路径关联，标明证据、未验证原因与保留理由；自动识别项目级 `projects/*/memory` 与 `CLAUDE.md` 为工作资产，不混入未识别会话。不会因 session-env 缺失或项目路径不存在就判定可删。
+- **只读 HTML**：离线单文件，支持搜索、类别/关联筛选、分页及审阅清单导出；默认遮罩常见身份与密钥格式（保留带 `@` 的插件文件名后缀），没有删除、应用或恢复接口。
 - **验证备份**：SHA-256、基础权限/属主、链接目标、复制前后源一致性及恢复样本；保留 schema 1 备份兼容性。
-- **恢复计划与回执**：验证旧备份及恢复前当前备份，生成精确逐文件计划，随后观察恢复结果与全部未选项。helper 不执行恢复、不验证人的授权。
+- **恢复计划与回执**：验证旧备份及恢复前当前备份（支持 `backup --allow-missing` 记录已移除单文件根的缺失前态），生成精确逐文件计划，随后观察恢复结果与全部未选项。helper 不执行恢复、不验证人的授权。
 
-项目历史、settings、Skills、插件、MCP、hooks 和网关路由默认保留。用户排除的环境不查不改。文件删除、清空历史、修改凭据等动作必须对应真实用户确认；工具输出不代表批准。
+项目历史、`projects/*/memory`、settings、Skills、插件、MCP、hooks 和网关路由默认保留。用户排除的环境不查不改。文件删除、清空历史、修改凭据等动作必须对应真实用户确认；工具输出不代表批准。
 
 ## 安装与调用
 
@@ -28,7 +28,7 @@ git clone https://github.com/luwill/cc-clean.git
 | Codex | `~/.codex/skills/cc-clean/` | `$cc-clean` |
 | Claude Code | `~/.claude/skills/cc-clean/` | `/cc-clean` |
 
-也可让 Claude Code 的技能入口链接到同一份 Codex 技能代码。自定义配置目录的发现规则需按实际环境核实。
+也可让 Claude Code 的技能入口链接到同一份 Codex 技能代码。自定义配置目录的发现规则需按实际环境核实。若在**目标环境的活跃 Claude Code 会话内**直接调用 `/cc-clean`，当前会话内仅执行只读检查（`audit` / `report`）与计划确认；涉及全树静止校验的备份、`verify --check-source`、清理和恢复，应在退出目标 Claude 会话后从外部环境（如 Codex `$cc-clean` 或独立配置目录）执行。
 
 示例请求：
 
@@ -36,7 +36,7 @@ git clone https://github.com/luwill/cc-clean.git
 
 ## 直接运行只读 helper
 
-先创建位于源目录之外的私有报告目录；下面的 OUTPUT_DIR 请换为明确选择的绝对路径。
+先创建位于源目录之外、且不含符号链接祖先的私有报告目录（macOS 下 `/tmp`、`/var` 为系统软链接，请使用 `/private/...` 真实路径或主目录下新建的私有目录）；下面的 `OUTPUT_DIR` 请换为明确选择的绝对路径。
 
 ```bash
 python3 -B cc-clean/scripts/local_state.py audit \
