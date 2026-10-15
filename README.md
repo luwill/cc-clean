@@ -1,11 +1,12 @@
 # cc-clean
 
-Claude Code 环境检查与按确认范围清理的 Agent Skill。当前版本 **v0.2.1**，支持 Codex 和 Claude Code。
+Claude Code 环境检查与按确认范围清理的 Agent Skill。当前版本 **v0.2.2**，支持 Codex 和 Claude Code。
 
 从只读检查开始：查清旧账号状态的实际位置、会话与附属文件的关联、需要保留的工作资产；验证备份后，才按用户确认的具体清单执行操作。账号恢复或申诉仍使用官方渠道，本地操作不改变服务端记录。
 
 ## 能力
 
+- **Device ID 摘要**：精确识别显式主状态 JSON 中的 `deviceId`、`device_id`、`deviceID`，含嵌套对象与数组；仅记录结构位置、类型和存在性，不记录原值或原值哈希。默认保留，清理前仍需核实、备份校验和具体确认。
 - **关联清单**：项目会话、session-env、file-history、debug、todos 的同根 UUID 路径关联，标明证据、未验证原因与保留理由；自动识别项目级 `projects/*/memory` 与 `CLAUDE.md` 为工作资产，不混入未识别会话。不会因 session-env 缺失或项目路径不存在就判定可删。
 - **只读 HTML**：离线单文件，支持搜索、类别/关联筛选、分页及审阅清单导出；默认遮罩常见身份与密钥格式（保留带 `@` 的插件文件名后缀），没有删除、应用或恢复接口。
 - **验证备份**：SHA-256、基础权限/属主、链接目标、复制前后源一致性及恢复样本；保留 schema 1 备份兼容性。
@@ -50,7 +51,7 @@ python3 -B cc-clean/scripts/local_state.py report \
   --output "$OUTPUT_DIR/report.html"
 ```
 
-audit 只记录文件元数据，不读取凭据或历史正文。主状态 JSON 只有显式指定 `--state-file` 时才读取，输出字段存在性与数量。HTML 只读取提供的审计文件，不重新访问环境。原始 JSON 与 HTML 都以 0600 创建；路径与未知格式文件名仍可能是私密信息，真实报告应留在本地，分享前复核。
+audit 只记录文件元数据，不读取凭据或历史正文。主状态 JSON 只有显式指定 `--state-file` 时才读取，输出字段摘要；device ID 的嵌套位置用从 0 开始的对象键序号与数组下标，不保留可能夹带身份信息的祖先键名。空值也算字段存在，不推断有效性或账号归属；解析失败、重复 JSON 键或缺少递归检查摘要时不宣称全局没有 ID。扫描不展开字符串/编码内容、不读取其他文件正文、不获取或重置系统硬件 ID。HTML 只读取提供的审计文件，不重新访问环境。原始 JSON 与 HTML 都以 0600 创建；路径与未知格式文件名仍可能是私密信息，真实报告应留在本地，分享前复核。
 
 详细规则见 [技能入口](cc-clean/SKILL.md)、[关联/报告/恢复说明](cc-clean/references/review.md)、[确认清单与操作](cc-clean/references/operations.md)。
 
@@ -60,6 +61,6 @@ audit 只记录文件元数据，不读取凭据或历史正文。主状态 JSON
 make check
 ```
 
-执行源码格式/语法/引用检查与 **50 项虚构数据测试**。不会访问真实 Claude 目录、Keychain、进程环境或网络；测试样本保留在被 Git 忽略的 `test-artifacts/` 中，不自动删除。HTML 的 JavaScript 语法检查需要 Node.js。
+执行源码格式/语法/引用检查与 **67 项虚构数据测试**。不会访问真实 Claude 目录、Keychain、进程环境或网络；测试样本保留在被 Git 忽略的 `test-artifacts/` 中，不自动删除。HTML 的 JavaScript 语法检查需要 Node.js。
 
 仅包含技能、说明与测试代码。真实审计、原始历史、凭据、备份、安装回执和本机路径清单不应提交到仓库。

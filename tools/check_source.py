@@ -5,7 +5,7 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
-paths = [ROOT / 'README.md', ROOT / 'test_local_state.py', ROOT / 'test_review_tools.py', Path(__file__).resolve()]
+paths = [ROOT / 'README.md', *sorted(ROOT.glob('test_*.py')), Path(__file__).resolve()]
 paths.extend(p for p in (ROOT / 'cc-clean').rglob('*') if p.is_file() and '__pycache__' not in p.parts)
 for path in paths:
     text = path.read_text(encoding='utf-8')

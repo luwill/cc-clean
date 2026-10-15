@@ -256,6 +256,38 @@ def receipt_metadata(core, record):
     return record
 
 
+def validate_device_id_summary(core, state):
+    keys = {'device_id_fields', 'device_id_field_count', 'device_id_scan_scope', 'device_id_scan_complete'}
+    if not keys.intersection(state):
+        return  # v0.2.1 and older audits contain no recursive device-ID summary.
+    core.require(keys <= state.keys(), 'Incomplete device-ID summary')
+    core.require(state.get('missing') is not True, 'Missing state cannot have a completed device-ID scan')
+    fields = state['device_id_fields']
+    core.require(isinstance(fields, list) and type(state['device_id_field_count']) is int and
+                 state['device_id_field_count'] == len(fields), 'Invalid device-ID field count')
+    core.require(state['device_id_scan_scope'] == 'selected-state-json-objects-and-arrays' and
+                 state['device_id_scan_complete'] is True, 'Invalid device-ID scan scope')
+    seen = set()
+    for row in fields:
+        core.require(isinstance(row, dict) and set(row) == {'field', 'location', 'value_type', 'present',
+                     'value_recorded', 'ownership', 'preserve'}, 'Device-ID findings must contain metadata only')
+        core.require(isinstance(row['field'], str) and row['field'] in core.DEVICE_ID_KEYS and
+                     isinstance(row['value_type'], str) and row['value_type'] in
+                     {'null', 'boolean', 'number', 'string', 'array', 'object'}, 'Invalid device-ID metadata')
+        core.require(row['present'] is True and row['value_recorded'] is False and row['preserve'] is True and
+                     row['ownership'] == 'unverified', 'Device-ID findings cannot authorize cleanup')
+        core.require(isinstance(row['location'], list) and bool(row['location']), 'Device-ID location missing')
+        path = []
+        for segment in row['location']:
+            core.require(isinstance(segment, dict) and len(segment) == 1 and
+                         next(iter(segment)) in {'object_key_index', 'array_index'}, 'Invalid device-ID location')
+            kind, index = next(iter(segment.items()))
+            core.require(type(index) is int and index >= 0, 'Device-ID location must contain numeric indices only')
+            path.append((kind, index))
+        core.require(path[-1][0] == 'object_key_index' and tuple(path) not in seen, 'Ambiguous device-ID location')
+        seen.add(tuple(path))
+
+
 def render_report(core, audit_file, output, receipt_file=None):
     audit = core.safe_json(core.lexical_path(audit_file))
     core.require(isinstance(audit, dict) and audit.get('schema') == core.SCHEMA and audit.get('mode') == 'metadata-only',
@@ -316,7 +348,9 @@ def render_report(core, audit_file, output, receipt_file=None):
     if state is not None:
         core.require(isinstance(state, dict), 'Invalid audit state summary')
         core.require(set(state) <= {'missing', 'identity_keys_present', 'cache_keys_present',
-                     'unclassified_top_level_key_count', 'projects_count', 'mcp_servers_count'}, 'Unexpected audit state fields')
+                     'unclassified_top_level_key_count', 'projects_count', 'mcp_servers_count',
+                     'device_id_fields', 'device_id_field_count', 'device_id_scan_scope', 'device_id_scan_complete'},
+                     'Unexpected audit state fields')
         for key, known in (('identity_keys_present', core.IDENTITY_KEYS), ('cache_keys_present', core.CACHE_KEYS)):
             if key in state:
                 core.require(isinstance(state[key], list) and all(value in known for value in state[key]),
@@ -326,6 +360,7 @@ def render_report(core, audit_file, output, receipt_file=None):
                 core.require(state[key] is None or (type(state[key]) is int and state[key] >= 0), 'Invalid audit count')
         if 'missing' in state:
             core.require(type(state['missing']) is bool, 'Invalid missing-state flag')
+        validate_device_id_summary(core, state)
     payload = mask_data({'created_at': audit.get('created_at'), 'summary': audit['summary'], 'state': state,
                          'categories': dict(counts), 'rows': rows, 'relationships': graph, 'receipt': receipt,
                          'cleanup_authorized': False, 'masked': True}, audit['roots'])

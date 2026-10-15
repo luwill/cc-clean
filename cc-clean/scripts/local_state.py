@@ -17,8 +17,9 @@ import sys
 sys.dont_write_bytecode = True
 
 SCHEMA = 1
+DEVICE_ID_KEYS = ('deviceId', 'device_id', 'deviceID')
 IDENTITY_KEYS = (
-    'oauthAccount', 'userID', 'machineID', 'deviceId', 'groveConfigCache',
+    'oauthAccount', 'userID', 'machineID', *DEVICE_ID_KEYS, 'groveConfigCache',
     'passesEligibilityCache', 'overageCreditGrantCache', 'fotwUpsellFulfilled',
     'clientDataCacheSlots', 'cachedArtifactRoster', 'githubWebConnectionStatusCache',
     'cachedUsageUtilization', 'promoStartupStatusCache',
@@ -81,7 +82,7 @@ def outside_sources(path, roots):
                 'Output must be outside and must not contain any source root')
 
 
-def safe_json(path):
+def safe_json(path, reject_duplicate_keys=False):
     no_symlink_parents(path)
     require(path.is_file(), 'JSON file is missing or not a regular file')
     flags = os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0)
@@ -92,9 +93,15 @@ def safe_json(path):
         raw = stream.read()
         after = os.fstat(stream.fileno())
     require(stable(before) == stable(after), 'JSON input changed during reading')
+    def object_pairs(pairs):
+        result = {}
+        for key, value in pairs:
+            require(key not in result, 'State JSON contains duplicate keys; field locations cannot be verified')
+            result[key] = value
+        return result
     try:
-        return json.loads(raw)
-    except (ValueError, UnicodeError):
+        return json.loads(raw, object_pairs_hook=object_pairs if reject_duplicate_keys else None)
+    except (ValueError, UnicodeError, RecursionError):
         raise GuardError('Invalid JSON; contents intentionally not printed') from None
 
 
@@ -188,6 +195,46 @@ def summary(trees):
             'symlinks': counts['symlink'], 'bytes': total, 'missing_roots': missing}
 
 
+def device_id_fields(state):
+    """Inspect JSON objects/arrays without retaining values or user-defined ancestor keys."""
+    findings = []
+
+    def value_type(value):
+        if value is None:
+            return 'null'
+        if isinstance(value, bool):
+            return 'boolean'
+        if isinstance(value, dict):
+            return 'object'
+        if isinstance(value, list):
+            return 'array'
+        if isinstance(value, str):
+            return 'string'
+        return 'number'
+
+    # Iterator frames keep traversal iterative, including deeply nested JSON arrays.
+    def children(value):
+        return iter(value.items()) if isinstance(value, dict) else enumerate(value)
+
+    frames = [(state, (), 0, children(state))]
+    while frames:
+        container, location, ordinal, iterator = frames[-1]
+        try:
+            key, value = next(iterator)
+        except StopIteration:
+            frames.pop()
+            continue
+        frames[-1] = (container, location, ordinal + 1, iterator)
+        segment = {'object_key_index': ordinal} if isinstance(container, dict) else {'array_index': key}
+        child_location = (*location, segment)
+        if isinstance(container, dict) and key in DEVICE_ID_KEYS:
+            findings.append({'field': key, 'location': list(child_location), 'value_type': value_type(value),
+                             'present': True, 'value_recorded': False, 'ownership': 'unverified', 'preserve': True})
+        if isinstance(value, (dict, list)):
+            frames.append((value, child_location, 0, children(value)))
+    return findings
+
+
 def audit(roots, output, state_file=None):
     from review_tools import relationships
     outside_sources(output, roots)
@@ -203,8 +250,9 @@ def audit(roots, output, state_file=None):
                 'State file must be within an explicitly selected root')
         require(state_file.name == '.claude.json', 'Only the explicitly selected .claude.json may be parsed in audit')
         if state_file.exists():
-            state = safe_json(state_file)
+            state = safe_json(state_file, reject_duplicate_keys=True)
             require(isinstance(state, dict), 'State JSON must be an object')
+            devices = device_id_fields(state)
             data['state'] = {
                 'identity_keys_present': [key for key in IDENTITY_KEYS if key in state],
                 'cache_keys_present': [key for key in CACHE_KEYS if key in state],
@@ -212,6 +260,10 @@ def audit(roots, output, state_file=None):
                                                         - {'projects', 'mcpServers'}),
                 'projects_count': len(state['projects']) if isinstance(state.get('projects'), dict) else None,
                 'mcp_servers_count': len(state['mcpServers']) if isinstance(state.get('mcpServers'), dict) else None,
+                'device_id_fields': devices,
+                'device_id_field_count': len(devices),
+                'device_id_scan_scope': 'selected-state-json-objects-and-arrays',
+                'device_id_scan_complete': True,
             }
         else:
             data['state'] = {'missing': True}

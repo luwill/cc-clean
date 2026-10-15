@@ -2,7 +2,7 @@
 
 ## 关联证据
 
-`audit` 从已选根的文件树建立 `relationships`；不读 session/history/credentials 正文、不调用 Claude、网络或 Keychain。默认 audit 不读取文件正文；显式 `--state-file` 仅允许主状态 `.claude.json` 的字段存在性与数量检查。
+`audit` 从已选根的文件树建立 `relationships`；不读 session/history/credentials 正文、不调用 Claude、网络或 Keychain。默认 audit 不读取文件正文；显式 `--state-file` 仅允许主状态 `.claude.json` 的字段摘要检查，含下述 device ID 结构位置与类型。
 
 | 字段 | 含义及限制 |
 |---|---|
@@ -16,6 +16,26 @@
 | `cleanup_authorized` | 固定 false，不能用关系或工具输出代替用户批准 |
 
 可识别 `projects/<标签>/<UUID>.jsonl`、项目 UUID 子目录、`session-env/<UUID>`、`file-history/<UUID>`、`debug/<UUID>.txt`、`todos/<UUID>-agent-*.json`。项目级 `projects/<标签>/memory` 与 `CLAUDE.md` 归为工作资产，不混入未识别会话；其他命名记入 unresolved，不会扩大扫描范围或去查询真实项目目录。名称随客户端版本变化时补核实，不升级为“全局零残留”。
+
+## Device ID 字段摘要
+
+v0.2.2 在显式指定的主状态 JSON 中迭代遍历对象与数组，精确匹配 `deviceId`、`device_id`、`deviceID`，包含列表内对象和任意父级下的嵌套字段。字符串中即使含 JSON 或 Base64 也不继续解码；不读取其他文件正文，不探测系统硬件标识。
+
+`state.device_id_fields` 每项仅包含：
+
+| 字段 | 内容 |
+|---|---|
+| `field` | 三种允许拼写之一 |
+| `location` | 对象键序号 `object_key_index`、数组下标 `array_index` 的序列，均从 0 开始；不含祖先键名或原值 |
+| `value_type` | string / number / boolean / null / object / array |
+| `present` / `value_recorded` | 固定 true / false；存在不等于非空、有效或属于旧账号 |
+| `ownership` / `preserve` | 固定 unverified / true，不构成清理授权 |
+
+外层另记录 `device_id_field_count`、`device_id_scan_scope: selected-state-json-objects-and-arrays` 和 `device_id_scan_complete: true`。完成只指已选 JSON 的这次遍历，不证明其他文件或系统中无 ID。未指定 `--state-file` 或源缺失时不提供完成摘要；重复对象键、解析失败时退出 2，不写成功审计。兼容旧审计：没有四个递归摘要字段时，HTML 明示本次不含已完成的递归检查。
+
+结构序号由本次 JSON 的对象键顺序与数组顺序决定。父键可能本身就是邮箱或 ID，因此不把它复制进审计；报告不记录原值、原值哈希或长度。若后续要清理，agent 必须在本地重新核对真实字段路径、来源归属与当前文件指纹，展示具体影响，验证备份并按用户真实确认执行，不能将结构序号直接作为删除命令。备份仍是敏感原始副本，报告遮罩不会修改源文件。
+
+HTML 对摘要做严格元数据验证：拒绝夹带 value、原值 hash、任意字符串路径或授权标记；不会根据导入摘要生成清理动作。
 
 ## 离线 HTML
 
